@@ -317,6 +317,9 @@ class DescrptSeA ():
         with tf.variable_scope(name, reuse=reuse):
           start_index = 0
           xyz_scatter_total = []
+          xyz_scatter_1 = None
+          xyz_scatter_2 = None
+          qmat = None
           for type_i in range(self.ntypes):
             # cut-out inputs
             # with natom x (nei_type_i x 4)  
@@ -359,23 +362,29 @@ class DescrptSeA ():
                   xyz_scatter = activation_fn(tf.matmul(xyz_scatter, w) + b)
             # natom x nei_type_i x out_size
             xyz_scatter = tf.reshape(xyz_scatter, (-1, shape_i[1]//4, outputs_size[-1]))
-            xyz_scatter_total.append(xyz_scatter)
-
-          # natom x nei x outputs_size
-          xyz_scatter = tf.concat(xyz_scatter_total, axis=1)
-          # natom x nei x 4
-          inputs_reshape = tf.reshape(inputs, [-1, shape[1]//4, 4])
-          # natom x 4 x outputs_size
-          xyz_scatter_1 = tf.matmul(inputs_reshape, xyz_scatter, transpose_a = True)
-          xyz_scatter_1 = xyz_scatter_1 * (4.0 / shape[1])
-          # natom x 4 x outputs_size_2
-          xyz_scatter_2 = tf.slice(xyz_scatter_1, [0,0,0],[-1,-1,outputs_size_2])
-          # # natom x 3 x outputs_size_2
-          # qmat = tf.slice(xyz_scatter_2, [0,1,0], [-1, 3, -1])
-          # natom x 3 x outputs_size_1
-          qmat = tf.slice(xyz_scatter_1, [0,1,0], [-1, 3, -1])
-          # natom x outputs_size_1 x 3
-          qmat = tf.transpose(qmat, perm = [0, 2, 1])
+            # natom x nei_type_i x 4
+            inputs_reshape = tf.reshape(inputs_i, [-1, shape_i[1]//4, 4])
+            # natom x 4 x outputs_size
+            tmp_1 = tf.matmul(inputs_reshape, xyz_scatter, transpose_a = True)
+            tmp_1 = tmp_1 * (4.0 / shape[1])
+            if xyz_scatter_1 is None:
+                xyz_scatter_1 = tmp_1
+            else:
+                xyz_scatter_1 += tmp_1
+            # natom x 4 x outputs_size_2
+            tmp_2 = tf.slice(tmp_1, [0,0,0],[-1,-1,outputs_size_2])
+            if xyz_scatter_2 is None:
+                xyz_scatter_2 = tmp_2
+            else:
+                xyz_scatter_2 += tmp_2
+            # natom x 3 x outputs_size_1
+            tmp_qmat = tf.slice(tmp_1, [0,1,0], [-1, 3, -1])
+            # natom x outputs_size_1 x 3
+            tmp_qmat = tf.transpose(tmp_qmat, perm = [0, 2, 1])
+            if qmat is None:
+                qmat = tmp_qmat
+            else:
+                qmat += tmp_qmat
           # natom x outputs_size x outputs_size_2
           result = tf.matmul(xyz_scatter_1, xyz_scatter_2, transpose_a = True)
           # natom x (outputs_size x outputs_size_2)
